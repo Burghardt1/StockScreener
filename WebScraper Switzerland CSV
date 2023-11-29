@@ -1,0 +1,93 @@
+#To run this code, you must import the pandas package. To use this code generally, you can replace the "columnName" variable with whichever column (or row) contains the websites
+#to invoke it, run python impressum.py [inputexcelfile].xlsx [outputcsvfile].csv in the command line (linux)
+#alternatively if you're in an IDE you can choose the input file and output file as arguments
+#input file must be in same folder as the code
+
+import pandas as pd
+import sys
+import requests
+from time import sleep
+from bs4 import BeautifulSoup
+import re
+
+columnName="website"
+
+def extract_links(file_path, column_name):
+    try:
+        excelFile = pd.read_excel(file_path)
+        links = excelFile[column_name].tolist()
+        return links
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+def extract_p(url):
+    try:
+        # Send an HTTP request to the website
+        response = requests.get(url,timeout=7)
+        response.raise_for_status()
+
+        # Parse the HTML content of the page
+        soup = BeautifulSoup(response.content, 'html.parser')
+        paragraphs = soup.find_all('p')
+        out=""
+        for paragraph in paragraphs:
+            text=paragraph.get_text(separator='\n')
+            #print(text)
+            #print("-"*20)
+            #filter some long paragraphs
+            pattern = re.compile('.{101,}')
+            text = re.sub(pattern, '', text)
+            if "\n" in text[:100] or len(text)<100:
+                out+=text+'\n'
+
+        out = re.sub('\n\n+', '\n', out)
+        out = re.sub('"', '""', out)
+        return(out)
+
+    except requests.RequestException as e:
+        print(f"An error occurred while accessing {url}: {e}")
+
+
+
+links=extract_links(sys.argv[1], columnName)
+outputFileName=sys.argv[2]
+with open(outputFileName,"w") as file:
+    file.write("\"\"\n")
+
+print(links)
+
+
+yes=0
+total=0
+#main loop
+for link in links:#[3050:]:
+    output=""
+    total+=1
+    if (not isinstance(link,str)):
+        with open(outputFileName,"a") as file:
+            file.write("\"\"\n")
+        continue
+
+
+    link="https://"+link+"/impressum"
+    try:
+        response = requests.get(link,timeout=7)
+        if response.status_code >= 200 and response.status_code < 400:
+            print(f"{link}")# exists - Status code: {response.status_code}")
+            yes+=1
+            output=extract_p(link)
+            print(f"{yes}/{total}")
+        else:
+            #print(f"{link}")# does not exist - Status code: {response.status_code}")
+            print(f"{yes}/{total}")
+
+    except requests.RequestException as e:
+        print("FWAKKK")
+
+    with open(outputFileName,"a") as file:
+        if (isinstance(output,str)):
+            file.write("\""+output+"\"\n")#.replace("\"","\"\"")+"\"\n")
+            continue
+        file.write("\"\"\n")
